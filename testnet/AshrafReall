@@ -1,0 +1,97 @@
+from binance.client import Client
+import pandas as pd
+import time
+
+# إعداد مفاتيح API (ضع مفاتيحك هنا)
+API_KEY = "ضع_مفتاح_API_هنا"
+API_SECRET = "ضع_المفتاح_السري_API_هنا"
+
+# إنشاء عميل Binance
+client = Client(API_KEY, API_SECRET)
+
+# إعداد معلمات البوت
+PAIR = "BTCUSDT"  # زوج التداول
+INTERVAL = "1h"  # الإطار الزمني (ساعة واحدة)
+RSI_PERIOD = 14  # فترة مؤشر RSI
+OVERBOUGHT = 70  # حد التشبع الشرائي
+OVERSOLD = 30    # حد التشبع البيعي
+TRADE_AMOUNT = 0.001  # كمية التداول (مثال: 0.001 BTC)
+
+# حساب مؤشر RSI
+def calculate_rsi(data):
+    delta = data['close'].diff()
+    gain = delta.where(delta > 0, 0)
+    loss = -delta.where(delta < 0, 0)
+
+    avg_gain = gain.rolling(window=RSI_PERIOD).mean()
+    avg_loss = loss.rolling(window=RSI_PERIOD).mean()
+
+    rs = avg_gain / avg_loss
+    rsi = 100 - (100 / (1 + rs))
+    return rsi
+
+# الحصول على بيانات السوق
+def get_historical_data():
+    candles = client.get_klines(symbol=PAIR, interval=INTERVAL)
+    data = pd.DataFrame(candles, columns=[
+        'timestamp', 'open', 'high', 'low', 'close', 'volume',
+        'close_time', 'quote_asset_volume', 'number_of_trades',
+        'taker_buy_base_asset_volume', 'taker_buy_quote_asset_volume', 'ignore'
+    ])
+    data['close'] = data['close'].astype(float)
+    return data
+
+# تنفيذ أمر شراء
+def place_buy_order():
+    try:
+        order = client.order_market_buy(
+            symbol=PAIR,
+            quantity=TRADE_AMOUNT
+        )
+        print("تم تنفيذ صفقة شراء:", order)
+    except Exception as e:
+        print("خطأ في أمر الشراء:", e)
+
+# تنفيذ أمر بيع
+def place_sell_order():
+    try:
+        order = client.order_market_sell(
+            symbol=PAIR,
+            quantity=TRADE_AMOUNT
+        )
+        print("تم تنفيذ صفقة بيع:", order)
+    except Exception as e:
+        print("خطأ في أمر البيع:", e)
+
+# البوت الرئيسي
+def trading_bot():
+    print("بدء البوت... تحقق من السوق")
+    while True:
+        try:
+            # الحصول على البيانات
+            data = get_historical_data()
+            data['rsi'] = calculate_rsi(data)
+
+            # آخر قيمة RSI
+            last_rsi = data['rsi'].iloc[-1]
+            print(f"RSI الحالي: {last_rsi}")
+
+            # اتخاذ القرار
+            if last_rsi < OVERSOLD:
+                print("RSI أقل من 30: فرصة شراء")
+                place_buy_order()
+            elif last_rsi > OVERBOUGHT:
+                print("RSI أعلى من 70: فرصة بيع")
+                place_sell_order()
+            else:
+                print("لا توجد فرص تداول الآن.")
+
+            # الانتظار قبل التكرار
+            time.sleep(60)  # الانتظار دقيقة واحدة
+        except Exception as e:
+            print("خطأ عام:", e)
+            time.sleep(60)
+
+# بدء البوت
+if __name__ == "__main__":
+    trading_bot()
